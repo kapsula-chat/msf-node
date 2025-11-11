@@ -1,6 +1,6 @@
 # KAPSULA
 
-**KAPSULA** is a **message store-and-forward (MSF) node** designed to provide a **truly independent, censorship- and blocking-resistant** way to send messages over the internet — and sometimes even **without an internet connection**.
+**KAPSULA** **message store-and-forward (MSF) node** designed to provide a **truly independent, censorship- and blocking-resistant** way to send messages over the internet — and sometimes even **without an internet connection**.
 
 It operates **completely independently**, requiring **no registration**. This independence imposes certain usage restrictions on public KAPSULA services to prevent abuse. If your usage pattern doesn’t fit within these limits, you can **deploy your own personal message node** and bypass all restrictions.
 
