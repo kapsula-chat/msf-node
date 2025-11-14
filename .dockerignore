@@ -1,0 +1,24 @@
+# Binaries
+/kapsula-server
+
+# Build output
+kapsula-server
+
+# Go vendor
+/vendor
+
+# IDE and system files
+.idea
+.vscode
+.DS_Store
+.github
+
+# Git
+.git
+
+# Local data
+data/
+scripts/
+
+# Environment
+.env
