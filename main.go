@@ -300,7 +300,7 @@ func (s *Server) startBadgerCollector(interval time.Duration) {
 func (s *Server) Start() error {
 	// Create an HTTP server
 	srv := &http.Server{
-		Addr:    "127.0.0.1:8080",
+		Addr:    ":8080",
 		Handler: s.router,
 	}
 
