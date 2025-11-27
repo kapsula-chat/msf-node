@@ -319,19 +319,6 @@ func (s *Server) sendMessage(c *gin.Context) {
 		}
 	}
 
-	devices = s.getUserDevices(from)
-
-	if len(devices) > 1 {
-		for _, device := range devices {
-			pendingKey := MakePendingFromMessageKey(messageKey, device)
-			s.messages <- RawMessage{
-				Key: pendingKey,
-				Val: nil, // empty value for pending records
-				TTL: time.Hour * 24 * 7,
-			}
-		}
-	}
-
 	c.JSON(http.StatusOK, gin.H{})
 }
 
