@@ -290,13 +290,16 @@ func (s *Server) sendMessage(c *gin.Context) {
 	messageKey := MakeMessageKey(rcpt, from, timestamp)
 
 	// Create pending records for all active recipient devices
-	var devices []string
-	devices = s.getUserDevices(rcpt)
+	var rcptDevices []string
+	rcptDevices = s.getUserDevices(rcpt)
+
+	var fromDevices []string
+	fromDevices = s.getUserDevices(from)
 
 	// If there are no devices, return an error
-	if len(devices) == 0 {
+	if len(rcptDevices) == 0 && len(fromDevices) == 0 {
 		if os.Getenv("SHOW_NO_DEVICE") != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Recipient has no registered devices"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No registered devices"})
 		} else {
 			c.JSON(http.StatusOK, gin.H{})
 		}
@@ -310,8 +313,8 @@ func (s *Server) sendMessage(c *gin.Context) {
 		TTL: time.Hour * 24 * 7,
 	}
 
-	for _, device := range devices {
-		pendingKey := MakePendingMessageKey(rcpt, from, timestamp, device)
+	for _, device := range rcptDevices {
+		pendingKey := MakePendingFromMessageKey(messageKey, device)
 		s.messages <- RawMessage{
 			Key: pendingKey,
 			Val: nil, // empty value for pending records
@@ -319,16 +322,12 @@ func (s *Server) sendMessage(c *gin.Context) {
 		}
 	}
 
-	devices = s.getUserDevices(from)
-
-	if len(devices) > 1 {
-		for _, device := range devices {
-			pendingKey := MakePendingFromMessageKey(messageKey, device)
-			s.messages <- RawMessage{
-				Key: pendingKey,
-				Val: nil, // empty value for pending records
-				TTL: time.Hour * 24 * 7,
-			}
+	for _, device := range fromDevices {
+		pendingKey := MakePendingFromMessageKey(messageKey, device)
+		s.messages <- RawMessage{
+			Key: pendingKey,
+			Val: nil, // empty value for pending records
+			TTL: time.Hour * 24 * 7,
 		}
 	}
 
