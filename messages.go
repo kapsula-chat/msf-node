@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -294,7 +295,11 @@ func (s *Server) sendMessage(c *gin.Context) {
 
 	// If there are no devices, return an error
 	if len(devices) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Recipient has no registered devices"})
+		if os.Getenv("SHOW_NO_DEVICE") != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Recipient has no registered devices"})
+		} else {
+			c.JSON(http.StatusOK, gin.H{})
+		}
 		return
 	}
 

@@ -134,3 +134,7 @@ Additionally, the server writes a Netdata Prometheus mapping YAML to the data di
   - Default: ""
   - Example: "secret-token"
   - Description: If set, enables key-based authentication when adding users to the node. The client must provide this token when connecting.
+- SHOW_NO_DEVICE
+  - Default: false
+  - Example: true
+  - Description: If set to true, the server will show explicit error while sending messages to the users without any associated devices.
