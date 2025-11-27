@@ -130,6 +130,11 @@ func (s *Server) requestSizeMiddleware() gin.HandlerFunc {
 
 func (s *Server) requestAuthMiddleware(token string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if c.Request.URL.Path == "/message" && c.Request.Method == "POST" {
+			// Allow unauthenticated message sending
+			c.Next()
+			return
+		}
 		authHeader := c.GetHeader("Authorization")
 		if authHeader != fmt.Sprintf("Bearer %s", token) {
 			c.JSON(http.StatusUnauthorized, gin.H{
