@@ -280,13 +280,15 @@ func (s *Server) sendMessage(c *gin.Context) {
 	}
 
 	// Verify signatureString
-	isValidSignature := ed25519.Verify(from, data, signature)
-	if !isValidSignature {
+	isValidSignatureFrom := ed25519.Verify(from, data, signature)
+	isValidSignatureRcpt := ed25519.Verify(rcpt, data, signature)
+
+	if !isValidSignatureFrom && !isValidSignatureRcpt {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid signature"})
 		return
 	}
 
-	// Create message key with unified timestamp
+	// Create a message key with a unified timestamp
 	messageKey := MakeMessageKey(rcpt, from, timestamp)
 
 	// Create pending records for all active recipient devices
@@ -297,7 +299,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 	fromDevices = s.getUserDevices(from)
 
 	// If there are no devices, return an error
-	if len(rcptDevices) == 0 && len(fromDevices) == 0 {
+	if len(rcptDevices) == 0 && isValidSignatureFrom {
 		if os.Getenv("SHOW_NO_DEVICE") != "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No registered devices"})
 		} else {
@@ -306,28 +308,41 @@ func (s *Server) sendMessage(c *gin.Context) {
 		return
 	}
 
-	// Send message
+	if len(fromDevices) == 0 && isValidSignatureRcpt {
+		if os.Getenv("SHOW_NO_DEVICE") != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No registered devices"})
+		} else {
+			c.JSON(http.StatusOK, gin.H{})
+		}
+		return
+	}
+
+	// Send a message
 	s.messages <- RawMessage{
 		Key: messageKey,
 		Val: data,
 		TTL: time.Hour * 24 * 7,
 	}
 
-	for _, device := range rcptDevices {
-		pendingKey := MakePendingFromMessageKey(messageKey, device)
-		s.messages <- RawMessage{
-			Key: pendingKey,
-			Val: nil, // empty value for pending records
-			TTL: time.Hour * 24 * 7,
+	if isValidSignatureFrom {
+		for _, device := range rcptDevices {
+			pendingKey := MakePendingFromMessageKey(messageKey, device)
+			s.messages <- RawMessage{
+				Key: pendingKey,
+				Val: nil, // empty value for pending records
+				TTL: time.Hour * 24 * 7,
+			}
 		}
 	}
 
-	for _, device := range fromDevices {
-		pendingKey := MakePendingFromMessageKey(messageKey, device)
-		s.messages <- RawMessage{
-			Key: pendingKey,
-			Val: nil, // empty value for pending records
-			TTL: time.Hour * 24 * 7,
+	if isValidSignatureRcpt {
+		for _, device := range fromDevices {
+			pendingKey := MakePendingFromMessageKey(messageKey, device)
+			s.messages <- RawMessage{
+				Key: pendingKey,
+				Val: nil, // empty value for pending records
+				TTL: time.Hour * 24 * 7,
+			}
 		}
 	}
 
