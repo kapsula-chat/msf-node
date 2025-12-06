@@ -362,7 +362,7 @@ func (s *Server) SendPush(to string) {
 	body := map[string]interface{}{
 		"to":      to,
 		"from":    to,
-		"message": "\"update\"",
+		"message": "{\"type\":\"message\"}",
 	}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
