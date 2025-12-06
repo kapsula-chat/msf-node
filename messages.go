@@ -6,8 +6,10 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -346,7 +348,33 @@ func (s *Server) sendMessage(c *gin.Context) {
 		}
 	}
 
+	if os.Getenv("SEND_PUSH") != "" && isValidSignatureFrom {
+		s.SendPush(base58.Encode(rcpt))
+	}
+	if os.Getenv("SEND_PUSH") != "" && isValidSignatureRcpt {
+		s.SendPush(base58.Encode(from))
+	}
+
 	c.JSON(http.StatusOK, gin.H{})
+}
+
+func (s *Server) SendPush(to string) {
+	body := map[string]interface{}{
+		"to":      to,
+		"from":    to,
+		"message": "\"update\"",
+	}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		log.Printf("Failed to marshal push body: %v", err)
+	} else {
+		go func() {
+			_, err := http.Post("https://push.kapsula.chat", "application/json", bytes.NewReader(bodyBytes))
+			if err != nil {
+				log.Printf("Failed to send push notification: %v", err)
+			}
+		}()
+	}
 }
 
 func (s *Server) getMessages(c *gin.Context) {
