@@ -369,9 +369,12 @@ func (s *Server) SendPush(to string) {
 		log.Printf("Failed to marshal push body: %v", err)
 	} else {
 		go func() {
-			_, err := http.Post("https://presence.kapsula.chat", "application/json", bytes.NewReader(bodyBytes))
+			response, err := http.Post("https://presence.kapsula.chat/push", "application/json", bytes.NewReader(bodyBytes))
 			if err != nil {
 				log.Printf("Failed to send push notification: %v", err)
+			}
+			if response.StatusCode != http.StatusOK {
+				log.Printf("Push notification failed with status: %s", response.Status)
 			}
 		}()
 	}
