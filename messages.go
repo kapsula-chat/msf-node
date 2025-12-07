@@ -8,21 +8,27 @@ package main
 import (
 	"bytes"
 	"crypto/ed25519"
+	"encoding/base32"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"filippo.io/edwards25519"
 	"github.com/dgraph-io/badger/v4"
 	"github.com/gin-gonic/gin"
+	"github.com/go-resty/resty/v2"
 	"github.com/mr-tron/base58"
+	"golang.org/x/net/idna"
 )
 
 func abs(a int64) int64 {
@@ -101,6 +107,115 @@ func MakeMessageKeyFromPending(pendingKey []byte) []byte {
 	key[1] = ':'
 	copy(key[2:], pendingKey[2+deviceIDlen:]) // More readable
 	return key
+}
+
+func ResolveAddressee(addr string) string {
+	// Handle username form: @username or plain username (no dot, no base58)
+	if strings.HasPrefix(addr, "@") {
+		addr = strings.TrimPrefix(addr, "@")
+		// Try to resolve username via DNS CNAME at username.kapsula.name
+		domain := addr + ".kapsula.name"
+		cname, err := net.LookupCNAME(domain)
+		if err != nil {
+			return ""
+		}
+		if cname == domain+"." {
+			// No CNAME record
+			return ""
+		}
+		cname = strings.TrimSuffix(strings.ToUpper(cname), ".")
+		parts := strings.Split(cname, ".")
+		if len(parts) < 2 {
+			return ""
+		}
+		dst := make([]byte, 32)
+		_, err = base32.StdEncoding.WithPadding(base32.NoPadding).Decode(dst, []byte(parts[0]))
+		if err != nil {
+			return ""
+		}
+		addr = base58.Encode(dst)
+	}
+	if ok, _ := regexp.Match("^[0-9]{9}$", []byte(addr)); ok {
+		response, err := http.Get("https://invite.kapsula.chat?code=" + addr)
+		if err != nil {
+			return ""
+		}
+		defer response.Body.Close()
+		if response.StatusCode != 200 {
+			return ""
+		}
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			return ""
+		}
+		inviteData := struct {
+			PublicKey string `json:"addr"`
+		}{}
+		err = json.Unmarshal(body, &inviteData)
+		if err != nil {
+			return ""
+		}
+		addr = inviteData.PublicKey
+	}
+	if strings.Contains(addr, ".") {
+		// This is a domain, validate it
+		cname, err := net.LookupCNAME(addr)
+		if err != nil {
+			return ""
+		}
+		if cname == addr+"." {
+			// No CNAME record
+			return ""
+		}
+		ascii, _ := idna.ToASCII(cname)
+		ascii = strings.TrimSuffix(strings.ToUpper(ascii), ".")
+		parts := strings.Split(ascii, ".")
+		if len(parts) <= 1 {
+			return ""
+		}
+		dst := make([]byte, 32)
+		_, err = base32.StdEncoding.WithPadding(base32.NoPadding).Decode(dst, []byte(parts[0]))
+		if err != nil {
+			log.Printf("base32 decode error: %v %s", err, parts[0])
+			return ""
+		}
+		log.Printf("decoded domain %s to pubkey %s", addr, cname)
+		addr = base58.Encode(dst)
+	}
+
+	binaryAddr, err := base58.Decode(addr)
+	if err != nil || len(binaryAddr) != 32 {
+		return ""
+	}
+
+	// Parse compressed Edwards25519 point
+	p := new(edwards25519.Point)
+	if _, err := p.SetBytes(binaryAddr); err != nil {
+		// invalid encoding
+		return ""
+	}
+
+	// Multiply by cofactor (8) and ensure result is not identity (small-order check)
+	// Build scalar "8" as 32-byte little-endian and set it.
+	var eightBytes [32]byte
+	eightBytes[0] = 8
+	cofactor, err := new(edwards25519.Scalar).SetCanonicalBytes(eightBytes[:])
+	if err != nil {
+		// should never happen for small constants
+		return ""
+	}
+	q := new(edwards25519.Point).ScalarMult(cofactor, p)
+	if q.Equal(edwards25519.NewIdentityPoint()) == 1 {
+		// small-order or identity point
+		return ""
+	}
+
+	url, err := net.LookupTXT(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(binaryAddr) + ".peer.kapsula.name")
+	if err != nil || len(url) == 0 {
+		return ""
+	}
+
+	return url[0]
 }
 
 func (s *Server) startWriter(db *badger.DB, in <-chan RawMessage, wg *sync.WaitGroup) {
@@ -301,16 +416,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 	fromDevices = s.getUserDevices(from)
 
 	// If there are no devices, return an error
-	if len(rcptDevices) == 0 && isValidSignatureFrom {
-		if os.Getenv("SHOW_NO_DEVICE") != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "No registered devices"})
-		} else {
-			c.JSON(http.StatusOK, gin.H{})
-		}
-		return
-	}
-
-	if len(fromDevices) == 0 && isValidSignatureRcpt {
+	if len(rcptDevices) == 0 && len(fromDevices) == 0 {
 		if os.Getenv("SHOW_NO_DEVICE") != "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No registered devices"})
 		} else {
@@ -326,18 +432,16 @@ func (s *Server) sendMessage(c *gin.Context) {
 		TTL: time.Hour * 24 * 7,
 	}
 
-	if isValidSignatureFrom {
-		for _, device := range rcptDevices {
-			pendingKey := MakePendingFromMessageKey(messageKey, device)
-			s.messages <- RawMessage{
-				Key: pendingKey,
-				Val: nil, // empty value for pending records
-				TTL: time.Hour * 24 * 7,
-			}
+	for _, device := range rcptDevices {
+		pendingKey := MakePendingFromMessageKey(messageKey, device)
+		s.messages <- RawMessage{
+			Key: pendingKey,
+			Val: nil, // empty value for pending records
+			TTL: time.Hour * 24 * 7,
 		}
 	}
 
-	if isValidSignatureRcpt {
+	if len(fromDevices) != 0 {
 		for _, device := range fromDevices {
 			pendingKey := MakePendingFromMessageKey(messageKey, device)
 			s.messages <- RawMessage{
@@ -346,12 +450,35 @@ func (s *Server) sendMessage(c *gin.Context) {
 				TTL: time.Hour * 24 * 7,
 			}
 		}
+	} else {
+		rcptUrl := ResolveAddressee(rcptString)
+		fromUrl := ResolveAddressee(fromString)
+		if rcptUrl != "" && fromUrl != "" && rcptUrl != fromUrl {
+			log.Printf("Cross-server message from %s to %s", fromUrl, rcptUrl)
+			go func() {
+				client := resty.New()
+				client.SetBaseURL(fromUrl)
+
+				resp, err := client.R().
+					SetHeader("Content-Type", "application/octet-stream").
+					SetHeader("X-From", fromString).
+					SetHeader("X-Rcpt", rcptString).
+					SetHeader("X-Signature", signatureString).
+					SetBody(data).
+					Post("/message")
+				if err != nil {
+					log.Printf("Cross-server message send error: %v", err)
+					return
+				}
+				if resp.StatusCode() != 200 {
+					log.Printf("Cross-server message send failed with status: %s", resp.Status())
+				}
+			}()
+		}
 	}
 
-	if os.Getenv("SEND_PUSH") != "" && isValidSignatureFrom {
+	if os.Getenv("SEND_PUSH") != "" {
 		s.SendPush(base58.Encode(rcpt))
-	}
-	if os.Getenv("SEND_PUSH") != "" && isValidSignatureRcpt {
 		s.SendPush(base58.Encode(from))
 	}
 
