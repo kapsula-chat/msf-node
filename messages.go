@@ -453,6 +453,10 @@ func (s *Server) sendMessage(c *gin.Context) {
 	} else {
 		rcptUrl := ResolveAddressee(rcptString)
 		fromUrl := ResolveAddressee(fromString)
+		if c.GetHeader("X-Cross-Server") == "1" {
+			// Prevent loops
+			fromUrl = ""
+		}
 		if rcptUrl != "" && fromUrl != "" && rcptUrl != fromUrl {
 			log.Printf("Cross-server message from %s to %s", fromUrl, rcptUrl)
 			go func() {
@@ -464,6 +468,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 					SetHeader("X-From", fromString).
 					SetHeader("X-Rcpt", rcptString).
 					SetHeader("X-Signature", signatureString).
+					SetHeader("X-Cross-Server", "1").
 					SetBody(data).
 					Post("/message")
 				if err != nil {
