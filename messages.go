@@ -450,26 +450,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 		if os.Getenv("SEND_PUSH") != "" {
 			s.SendPush(rcptString)
 		}
-	} else if c.Request.Host == fromUrlParsed.Hostname() && c.Request.URL.Path == strings.TrimSuffix(fromUrlParsed.Path, "/")+"/message" {
-		// Send a message
-		s.messages <- RawMessage{
-			Key: messageKey,
-			Val: data,
-			TTL: time.Hour * 24 * 7,
-		}
 
-		for _, device := range fromDevices {
-			pendingKey := MakePendingFromMessageKey(messageKey, device)
-			s.messages <- RawMessage{
-				Key: pendingKey,
-				Val: nil, // empty value for pending records
-				TTL: time.Hour * 24 * 7,
-			}
-		}
-		if os.Getenv("SEND_PUSH") != "" {
-			s.SendPush(fromString)
-		}
-	} else {
 		if c.GetHeader("X-Cross-Server") == "1" {
 			// Prevent loops
 			c.JSON(http.StatusOK, gin.H{})
@@ -497,6 +478,25 @@ func (s *Server) sendMessage(c *gin.Context) {
 					log.Printf("Cross-server message send failed with status: %s", resp.Status())
 				}
 			}()
+		}
+	} else if c.Request.Host == fromUrlParsed.Hostname() && c.Request.URL.Path == strings.TrimSuffix(fromUrlParsed.Path, "/")+"/message" {
+		// Send a message
+		s.messages <- RawMessage{
+			Key: messageKey,
+			Val: data,
+			TTL: time.Hour * 24 * 7,
+		}
+
+		for _, device := range fromDevices {
+			pendingKey := MakePendingFromMessageKey(messageKey, device)
+			s.messages <- RawMessage{
+				Key: pendingKey,
+				Val: nil, // empty value for pending records
+				TTL: time.Hour * 24 * 7,
+			}
+		}
+		if os.Getenv("SEND_PUSH") != "" {
+			s.SendPush(fromString)
 		}
 	}
 
