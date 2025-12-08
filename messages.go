@@ -426,19 +426,19 @@ func (s *Server) sendMessage(c *gin.Context) {
 		return
 	}
 
-	// Send a message
-	s.messages <- RawMessage{
-		Key: messageKey,
-		Val: data,
-		TTL: time.Hour * 24 * 7,
-	}
-
 	rcptUrl := ResolveAddressee(rcptString)
 	fromUrl := ResolveAddressee(fromString)
-	toUrlParsed, _ := url.Parse(rcptUrl)
+	rcptUrlParsed, _ := url.Parse(rcptUrl)
 	fromUrlParsed, _ := url.Parse(fromUrl)
 
-	if c.Request.Host == toUrlParsed.Host && c.Request.URL.Path == strings.TrimSuffix(toUrlParsed.Path, "/")+"/message" {
+	if c.Request.Host == rcptUrlParsed.Hostname() && c.Request.URL.Path == strings.TrimSuffix(rcptUrlParsed.Path, "/")+"/message" {
+		// Send a message
+		s.messages <- RawMessage{
+			Key: messageKey,
+			Val: data,
+			TTL: time.Hour * 24 * 7,
+		}
+
 		for _, device := range rcptDevices {
 			pendingKey := MakePendingFromMessageKey(messageKey, device)
 			s.messages <- RawMessage{
@@ -450,9 +450,14 @@ func (s *Server) sendMessage(c *gin.Context) {
 		if os.Getenv("SEND_PUSH") != "" {
 			s.SendPush(rcptString)
 		}
-	}
+	} else if c.Request.Host == fromUrlParsed.Hostname() && c.Request.URL.Path == strings.TrimSuffix(fromUrlParsed.Path, "/")+"/message" {
+		// Send a message
+		s.messages <- RawMessage{
+			Key: messageKey,
+			Val: data,
+			TTL: time.Hour * 24 * 7,
+		}
 
-	if c.Request.Host == fromUrlParsed.Host && c.Request.URL.Path == strings.TrimSuffix(fromUrlParsed.Path, "/")+"/message" {
 		for _, device := range fromDevices {
 			pendingKey := MakePendingFromMessageKey(messageKey, device)
 			s.messages <- RawMessage{
@@ -467,7 +472,8 @@ func (s *Server) sendMessage(c *gin.Context) {
 	} else {
 		if c.GetHeader("X-Cross-Server") == "1" {
 			// Prevent loops
-			fromUrl = ""
+			c.JSON(http.StatusOK, gin.H{})
+			return
 		}
 		if rcptUrl != "" && fromUrl != "" && rcptUrl != fromUrl {
 			log.Printf("Cross-server message from %s to %s", fromUrl, rcptUrl)
