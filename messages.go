@@ -433,19 +433,25 @@ func (s *Server) sendMessage(c *gin.Context) {
 		TTL: time.Hour * 24 * 7,
 	}
 
-	for _, device := range rcptDevices {
-		pendingKey := MakePendingFromMessageKey(messageKey, device)
-		s.messages <- RawMessage{
-			Key: pendingKey,
-			Val: nil, // empty value for pending records
-			TTL: time.Hour * 24 * 7,
+	rcptUrl := ResolveAddressee(rcptString)
+	fromUrl := ResolveAddressee(fromString)
+	toUrlParsed, _ := url.Parse(rcptUrl)
+	fromUrlParsed, _ := url.Parse(fromUrl)
+
+	if c.Request.Host == toUrlParsed.Host && c.Request.URL.Path == strings.TrimSuffix(toUrlParsed.Path, "/")+"/message" {
+		for _, device := range rcptDevices {
+			pendingKey := MakePendingFromMessageKey(messageKey, device)
+			s.messages <- RawMessage{
+				Key: pendingKey,
+				Val: nil, // empty value for pending records
+				TTL: time.Hour * 24 * 7,
+			}
+		}
+		if os.Getenv("SEND_PUSH") != "" {
+			s.SendPush(rcptString)
 		}
 	}
 
-	rcptUrl := ResolveAddressee(rcptString)
-	fromUrl := ResolveAddressee(fromString)
-
-	fromUrlParsed, _ := url.Parse(fromUrl)
 	if c.Request.Host == fromUrlParsed.Host && c.Request.URL.Path == strings.TrimSuffix(fromUrlParsed.Path, "/")+"/message" {
 		for _, device := range fromDevices {
 			pendingKey := MakePendingFromMessageKey(messageKey, device)
@@ -454,6 +460,9 @@ func (s *Server) sendMessage(c *gin.Context) {
 				Val: nil, // empty value for pending records
 				TTL: time.Hour * 24 * 7,
 			}
+		}
+		if os.Getenv("SEND_PUSH") != "" {
+			s.SendPush(fromString)
 		}
 	} else {
 		if c.GetHeader("X-Cross-Server") == "1" {
@@ -483,11 +492,6 @@ func (s *Server) sendMessage(c *gin.Context) {
 				}
 			}()
 		}
-	}
-
-	if os.Getenv("SEND_PUSH") != "" {
-		s.SendPush(base58.Encode(rcpt))
-		s.SendPush(base58.Encode(from))
 	}
 
 	c.JSON(http.StatusOK, gin.H{})
