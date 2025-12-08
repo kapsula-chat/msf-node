@@ -431,7 +431,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 	rcptUrlParsed, _ := url.Parse(rcptUrl)
 	fromUrlParsed, _ := url.Parse(fromUrl)
 
-	if c.Request.Host == rcptUrlParsed.Hostname() && c.Request.URL.Path == strings.TrimSuffix(rcptUrlParsed.Path, "/")+"/message" {
+	if c.Request.Host == rcptUrlParsed.Hostname() {
 		// Send a message
 		s.messages <- RawMessage{
 			Key: messageKey,
@@ -479,7 +479,9 @@ func (s *Server) sendMessage(c *gin.Context) {
 				}
 			}()
 		}
-	} else if c.Request.Host == fromUrlParsed.Hostname() && c.Request.URL.Path == strings.TrimSuffix(fromUrlParsed.Path, "/")+"/message" {
+	}
+
+	if c.Request.Host == fromUrlParsed.Hostname() {
 		// Send a message
 		s.messages <- RawMessage{
 			Key: messageKey,
