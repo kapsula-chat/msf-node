@@ -430,6 +430,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 	fromUrl := ResolveAddressee(fromString)
 	rcptUrlParsed, _ := url.Parse(rcptUrl)
 	fromUrlParsed, _ := url.Parse(fromUrl)
+	log.Printf("Resolved rcpt %s to %s, from %s to %s", rcptString, rcptUrl, fromString, fromUrl)
 
 	if c.Request.Host == rcptUrlParsed.Hostname() {
 		// Send a message
