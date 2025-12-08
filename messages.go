@@ -446,6 +446,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 	fromUrl := ResolveAddressee(fromString)
 
 	fromUrlParsed, _ := url.Parse(fromUrl)
+	log.Printf("fromUrlParsed: %v, Host: %s, Path: %s", fromUrlParsed, fromUrlParsed.Host, fromUrlParsed.Path)
 	if c.Request.Host == fromUrlParsed.Host && c.Request.URL.Path == fromUrlParsed.Path+"/message" {
 		for _, device := range fromDevices {
 			pendingKey := MakePendingFromMessageKey(messageKey, device)
