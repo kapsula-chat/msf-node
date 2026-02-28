@@ -1,0 +1,16 @@
+./allocator.go
+./bbloom.go
+./btree.go
+./buffer.go
+./calloc.go
+./calloc_64bit.go
+./calloc_nojemalloc.go
+./file.go
+./file_default.go
+./flags.go
+./histogram.go
+./mmap.go
+./mmap_darwin.go
+./rtutil.go
+./z.go
+./rtutil.s

@@ -110,6 +110,27 @@ func MakeMessageKeyFromPending(pendingKey []byte) []byte {
 	return key
 }
 
+func MakeMessageKeyFromPendingForDevice(pendingKey []byte, deviceID string) []byte {
+	deviceIDlen := len(deviceID)
+	if deviceIDlen == 0 {
+		return nil
+	}
+	if len(pendingKey) != 2+deviceIDlen+72 || pendingKey[0] != 'p' || pendingKey[1] != ':' {
+		return nil
+	}
+
+	// Enforce exact device-id match to avoid prefix collisions.
+	if string(pendingKey[2:2+deviceIDlen]) != deviceID {
+		return nil
+	}
+
+	key := make([]byte, 74)
+	key[0] = 'm'
+	key[1] = ':'
+	copy(key[2:], pendingKey[2+deviceIDlen:])
+	return key
+}
+
 func ResolveAddressee(addr string) string {
 	// Handle username form: @username or plain username (no dot, no base58)
 	if strings.HasPrefix(addr, "@") {
@@ -295,10 +316,6 @@ func (s *Server) startWriter(db *badger.DB, in <-chan RawMessage, wg *sync.WaitG
 
 		case <-timer.C:
 			flush()
-
-		case <-s.ctx.Done():
-			log.Println("Writer exiting due to context cancellation")
-			return
 		}
 	}
 }
@@ -519,7 +536,9 @@ func (s *Server) SendPush(to string) {
 			response, err := http.Post("https://presence.kapsula.chat/push", "application/json", bytes.NewReader(bodyBytes))
 			if err != nil {
 				log.Printf("Failed to send push notification: %v", err)
+				return
 			}
+			defer response.Body.Close()
 			if response.StatusCode != http.StatusOK {
 				log.Printf("Push notification failed with status: %s", response.Status)
 			}
@@ -607,9 +626,13 @@ func (s *Server) getMessages(c *gin.Context) {
 			pendingKey := item.KeyCopy(nil)
 
 			// Get message key from pending key
-			messageKey := MakeMessageKeyFromPending(pendingKey)
+			messageKey := MakeMessageKeyFromPendingForDevice(pendingKey, deviceID)
 			if messageKey == nil {
-				log.Printf("Failed to make message key from pending key: %s", string(item.Key()))
+				log.Printf("Skipping malformed or mismatched pending key")
+				continue
+			}
+			if !bytes.Equal(messageKey[34:66], rcpt) {
+				log.Printf("Skipping pending key with recipient mismatch")
 				continue
 			}
 			// Get message
@@ -621,7 +644,7 @@ func (s *Server) getMessages(c *gin.Context) {
 
 			// Check key length: m:(2) + sender(32) + recipient(32) + timestamp(8) = 74
 			if len(messageKey) != 74 {
-				log.Printf("Bad key length: %d %s", len(messageKey))
+				log.Printf("Bad key length: %d", len(messageKey))
 				continue
 			}
 

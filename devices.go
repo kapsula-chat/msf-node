@@ -120,7 +120,7 @@ func (s *Server) listDevices(c *gin.Context) {
 	}
 
 	// Check the timestamp is within 5 minutes to prevent replay attacks
-	now := time.Now().UnixNano()
+	now := time.Now().Unix()
 	if abs(now-timestamp) > 300 { // 5-minute tolerance
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Timestamp too old or in the future"})
 		return

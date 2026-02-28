@@ -103,7 +103,6 @@ func (s *Server) setupRouter() {
 
 	token := os.Getenv("KAPSULA_ACCESS_TOKEN")
 	if token != "" {
-		log.Printf("Access token: %s", token)
 		s.router.Use(s.requestAuthMiddleware(token))
 	}
 
@@ -314,11 +313,8 @@ func (s *Server) Start() error {
 		// Wait for a shutdown signal
 		sig := <-s.shutdown
 		log.Printf("Received signal: %v, shutting down...", sig)
-		// Cancel the context to stop background tasks
+		// Stop background collectors driven by context (writer is drained via channel close).
 		s.cancel()
-		if err := s.badger.Close(); err != nil {
-			log.Printf("Failed to close Badger DB: %v", err)
-		}
 
 		// Create context with timeout for shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -329,8 +325,14 @@ func (s *Server) Start() error {
 			log.Printf("Server forced to shutdown: %v", err)
 		}
 
-		// Wait for all goroutines to finish
+		// Drain queued writes and wait for background goroutines.
+		close(s.messages)
 		s.wg.Wait()
+
+		// Close DB after writer flushes queued operations.
+		if err := s.badger.Close(); err != nil {
+			log.Printf("Failed to close Badger DB: %v", err)
+		}
 		log.Println("Clean shutdown completed")
 	}()
 
