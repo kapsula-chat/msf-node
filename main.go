@@ -353,6 +353,9 @@ func main() {
 	if strings.ToUpper(os.Getenv("ENV")) != "PRODUCTION" {
 		dataDir = "./data"
 	}
+	if err := validateKapsulaPushConfig(); err != nil {
+		log.Printf("Push config warning: %v", err)
+	}
 
 	server := NewServer(dataDir)
 	if err := server.Start(); err != nil {

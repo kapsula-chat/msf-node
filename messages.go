@@ -467,7 +467,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 			s.publishToDeviceWS(rcpt, device, wsPayload)
 		}
 		if os.Getenv("SEND_PUSH") != "" {
-			s.SendPush(rcptString)
+			s.SendPush(rcptString, fromString)
 		}
 
 		if c.GetHeader("X-Cross-Server") == "1" {
@@ -518,35 +518,11 @@ func (s *Server) sendMessage(c *gin.Context) {
 			s.publishToDeviceWS(from, device, wsPayload)
 		}
 		if os.Getenv("SEND_PUSH") != "" {
-			s.SendPush(fromString)
+			s.SendPush(fromString, fromString)
 		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{})
-}
-
-func (s *Server) SendPush(to string) {
-	body := map[string]interface{}{
-		"to":      to,
-		"from":    to,
-		"message": "{\"type\":\"message\"}",
-	}
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		log.Printf("Failed to marshal push body: %v", err)
-	} else {
-		go func() {
-			response, err := http.Post("https://presence.kapsula.chat/push", "application/json", bytes.NewReader(bodyBytes))
-			if err != nil {
-				log.Printf("Failed to send push notification: %v", err)
-				return
-			}
-			defer response.Body.Close()
-			if response.StatusCode != http.StatusOK {
-				log.Printf("Push notification failed with status: %s", response.Status)
-			}
-		}()
-	}
 }
 
 func (s *Server) getMessages(c *gin.Context) {
