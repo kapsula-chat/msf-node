@@ -425,6 +425,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 
 	// Create a message key with a unified timestamp
 	messageKey := MakeMessageKey(rcpt, from, timestamp)
+	wsPayload := formatWSMessagePayload(messageKey, data)
 
 	// Create pending records for all active recipient devices
 	var rcptDevices []string
@@ -463,6 +464,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 				Val: nil, // empty value for pending records
 				TTL: time.Hour * 24 * 7,
 			}
+			s.publishToDeviceWS(rcpt, device, wsPayload)
 		}
 		if os.Getenv("SEND_PUSH") != "" {
 			s.SendPush(rcptString)
@@ -513,6 +515,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 				Val: nil, // empty value for pending records
 				TTL: time.Hour * 24 * 7,
 			}
+			s.publishToDeviceWS(from, device, wsPayload)
 		}
 		if os.Getenv("SEND_PUSH") != "" {
 			s.SendPush(fromString)

@@ -108,6 +108,7 @@ func (s *Server) setupRouter() {
 
 	s.router.POST("/message", s.sendMessage)
 	s.router.GET("/message", s.getMessages)
+	s.router.GET("/ws", s.websocketMessages)
 	s.router.GET("/device", s.listDevices)
 	s.router.POST("/device", s.registerDevice)
 	s.router.DELETE("/device", s.unregisterDevice)
