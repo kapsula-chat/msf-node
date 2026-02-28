@@ -1,5 +1,6 @@
 .idea/
 data/
 .env
+.gocache
 kapsula-server
 multi-image.tar

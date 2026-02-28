@@ -1,4 +1,0 @@
-./builder.go
-./iterator.go
-./merge_iterator.go
-./table.go

@@ -1,5 +1,0 @@
-./devices.go
-./main.go
-./messages.go
-./types.go
-./websocket_rt.go
