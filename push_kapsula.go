@@ -10,6 +10,7 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -30,6 +31,8 @@ type pushMessageWebhookRequest struct {
 	Timestamp           int64    `json:"timestamp"`
 	Lang                string   `json:"lang,omitempty"`
 }
+
+const msfKeySecretPath = "/run/secrets/MSF_KEY"
 
 func normalizePushURL() string {
 	base := strings.TrimSpace(os.Getenv("KAPSULA_PUSH_URL"))
@@ -117,8 +120,8 @@ func (s *Server) sendPushWebhook(recipientPublicKey, senderPublicKey string) {
 }
 
 func resolveNodePublicKey() string {
-	// Prefer deriving from private key to avoid duplicated config.
-	privSerialized := strings.TrimSpace(os.Getenv("KAPSULA_NODE_PRIVATE_KEY"))
+	// Derive the node public key from the mounted secret to avoid duplicated config.
+	privSerialized := readMSFKeySecret()
 	if privSerialized == "" {
 		return ""
 	}
@@ -136,6 +139,21 @@ func resolveNodePublicKey() string {
 	}
 
 	return ""
+}
+
+func readMSFKeySecret() string {
+	file, err := os.Open(msfKeySecretPath)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(string(data))
 }
 
 func parseSerializedByteArray(value string) ([]byte, error) {
@@ -181,6 +199,9 @@ func validateKapsulaPushConfig() error {
 	accessToken := strings.TrimSpace(os.Getenv("KAPSULA_PUSH_ACCESS_TOKEN"))
 	if accessToken == "" {
 		return fmt.Errorf("KAPSULA_PUSH_ACCESS_TOKEN is not set; push webhook calls will likely be unauthorized")
+	}
+	if readMSFKeySecret() == "" {
+		return fmt.Errorf("MSF push key is not available at %s; X-Node-Public-Key will be omitted", msfKeySecretPath)
 	}
 	return nil
 }
