@@ -448,8 +448,10 @@ func (s *Server) sendMessage(c *gin.Context) {
 	fromUrl := ResolveAddressee(fromString)
 	rcptUrlParsed, _ := url.Parse(rcptUrl)
 	fromUrlParsed, _ := url.Parse(fromUrl)
+	handledByRecipientHost := c.Request.Host == rcptUrlParsed.Hostname()
+	handledBySenderHost := c.Request.Host == fromUrlParsed.Hostname()
 
-	if c.Request.Host == rcptUrlParsed.Hostname() {
+	if handledByRecipientHost {
 		// Send a message
 		s.messages <- RawMessage{
 			Key: messageKey,
@@ -498,7 +500,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 		}
 	}
 
-	if c.Request.Host == fromUrlParsed.Hostname() {
+	if handledBySenderHost {
 		// Send a message
 		s.messages <- RawMessage{
 			Key: messageKey,
@@ -516,6 +518,17 @@ func (s *Server) sendMessage(c *gin.Context) {
 			s.publishToDeviceWS(from, device, wsPayload)
 		}
 		s.SendPush(fromString, fromString)
+	}
+
+	if !handledByRecipientHost && !handledBySenderHost {
+		log.Printf(
+			"Message accepted without local delivery branch: host=%s rcptHost=%s fromHost=%s rcpt=%s from=%s",
+			c.Request.Host,
+			rcptUrlParsed.Hostname(),
+			fromUrlParsed.Hostname(),
+			rcptString,
+			fromString,
+		)
 	}
 
 	c.JSON(http.StatusOK, gin.H{})
@@ -606,8 +619,10 @@ func (s *Server) getMessages(c *gin.Context) {
 				log.Printf("Skipping malformed or mismatched pending key")
 				continue
 			}
-			if !bytes.Equal(messageKey[34:66], rcpt) {
-				log.Printf("Skipping pending key with recipient mismatch")
+			messageSender := messageKey[2:34]
+			messageRecipient := messageKey[34:66]
+			if !bytes.Equal(messageRecipient, rcpt) && !bytes.Equal(messageSender, rcpt) {
+				log.Printf("Skipping pending key with owner mismatch")
 				continue
 			}
 			// Get message
@@ -623,7 +638,7 @@ func (s *Server) getMessages(c *gin.Context) {
 				continue
 			}
 
-			// Recipient already checked via prefix, additional check not needed
+			// The requesting key must own the message as either sender or recipient.
 
 			// Read message value
 			err = data.Value(func(val []byte) error {

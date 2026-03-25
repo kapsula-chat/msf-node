@@ -53,11 +53,13 @@ func (s *Server) SendPush(recipientPublicKey, senderPublicKey string) {
 	senderPublicKey = strings.TrimSpace(senderPublicKey)
 
 	if recipientPublicKey == "" || senderPublicKey == "" {
+		log.Printf("Skipping push: empty recipient or sender public key")
 		return
 	}
 
 	nodePublicKey := resolveNodePublicKey()
 	if nodePublicKey == "" {
+		log.Printf("Skipping push: node public key is unavailable")
 		return
 	}
 
@@ -116,11 +118,13 @@ func resolveNodePublicKey() string {
 	// Derive the node public key from the mounted secret to avoid duplicated config.
 	privSerialized := readMSFKeySecret()
 	if privSerialized == "" {
+		log.Printf("MSF key secret is empty or unavailable at %s", msfKeySecretPath)
 		return ""
 	}
 
 	raw, err := parseSerializedByteArray(privSerialized)
 	if err != nil {
+		log.Printf("Failed to parse MSF key secret at %s: %v", msfKeySecretPath, err)
 		return ""
 	}
 
@@ -131,18 +135,21 @@ func resolveNodePublicKey() string {
 		return base58.Encode(ed25519.PrivateKey(raw).Public().(ed25519.PublicKey))
 	}
 
+	log.Printf("Unsupported MSF key length at %s: got %d bytes", msfKeySecretPath, len(raw))
 	return ""
 }
 
 func readMSFKeySecret() string {
 	file, err := os.Open(msfKeySecretPath)
 	if err != nil {
+		log.Printf("Failed to open MSF key secret %s: %v", msfKeySecretPath, err)
 		return ""
 	}
 	defer file.Close()
 
 	data, err := io.ReadAll(file)
 	if err != nil {
+		log.Printf("Failed to read MSF key secret %s: %v", msfKeySecretPath, err)
 		return ""
 	}
 
