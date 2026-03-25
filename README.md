@@ -138,3 +138,7 @@ Additionally, the server writes a Netdata Prometheus mapping YAML to the data di
   - Default: false
   - Example: true
   - Description: If set to true, the server will show explicit error while sending messages to the users without any associated devices.
+- KAPSULA_NODE_PRIVATE_KEY
+  - Default: ""
+  - Example: "[12,34,56,78]"
+  - Description: Ed25519 private key or seed serialized as a JSON array of byte values. Used to derive `X-Node-Public-Key` for push webhook calls.

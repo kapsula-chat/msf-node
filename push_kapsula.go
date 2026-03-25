@@ -48,9 +48,18 @@ func buildMessageChatID(a, b string) string {
 func (s *Server) SendPush(recipientPublicKey, senderPublicKey string) {
 	recipientPublicKey = strings.TrimSpace(recipientPublicKey)
 	senderPublicKey = strings.TrimSpace(senderPublicKey)
+
 	if recipientPublicKey == "" || senderPublicKey == "" {
 		return
 	}
+
+	nodePublicKey := resolveNodePublicKey()
+	accessToken := strings.TrimSpace(os.Getenv("KAPSULA_PUSH_ACCESS_TOKEN"))
+
+	if accessToken == "" && nodePublicKey == "" {
+		return
+	}
+
 	go s.sendPushWebhook(recipientPublicKey, senderPublicKey)
 }
 
@@ -109,20 +118,41 @@ func (s *Server) sendPushWebhook(recipientPublicKey, senderPublicKey string) {
 
 func resolveNodePublicKey() string {
 	// Prefer deriving from private key to avoid duplicated config.
-	privB58 := strings.TrimSpace(os.Getenv("KAPSULA_NODE_PRIVATE_KEY"))
-	if privB58 != "" {
-		if raw, err := base58.Decode(privB58); err == nil {
-			switch len(raw) {
-			case ed25519.SeedSize:
-				return base58.Encode(ed25519.NewKeyFromSeed(raw).Public().(ed25519.PublicKey))
-			case ed25519.PrivateKeySize:
-				return base58.Encode(ed25519.PrivateKey(raw).Public().(ed25519.PublicKey))
-			}
-		}
+	privSerialized := strings.TrimSpace(os.Getenv("KAPSULA_NODE_PRIVATE_KEY"))
+	if privSerialized == "" {
+		return ""
 	}
 
-	// Fallback for explicit override.
-	return strings.TrimSpace(os.Getenv("KAPSULA_PUSH_NODE_PUBLIC_KEY"))
+	raw, err := parseSerializedByteArray(privSerialized)
+	if err != nil {
+		return ""
+	}
+
+	switch len(raw) {
+	case ed25519.SeedSize:
+		return base58.Encode(ed25519.NewKeyFromSeed(raw).Public().(ed25519.PublicKey))
+	case ed25519.PrivateKeySize:
+		return base58.Encode(ed25519.PrivateKey(raw).Public().(ed25519.PublicKey))
+	}
+
+	return ""
+}
+
+func parseSerializedByteArray(value string) ([]byte, error) {
+	var ints []int
+	if err := json.Unmarshal([]byte(value), &ints); err != nil {
+		return nil, err
+	}
+
+	raw := make([]byte, len(ints))
+	for i, n := range ints {
+		if n < 0 || n > 255 {
+			return nil, fmt.Errorf("byte value out of range at index %d", i)
+		}
+		raw[i] = byte(n)
+	}
+
+	return raw, nil
 }
 
 func (s *Server) SendPushLegacy(recipientPublicKey string) {
