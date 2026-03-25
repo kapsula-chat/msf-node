@@ -466,9 +466,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 			}
 			s.publishToDeviceWS(rcpt, device, wsPayload)
 		}
-		if os.Getenv("SEND_PUSH") != "" {
-			s.SendPush(rcptString, fromString)
-		}
+		s.SendPush(rcptString, fromString)
 
 		if c.GetHeader("X-Cross-Server") == "1" {
 			// Prevent loops
@@ -517,9 +515,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 			}
 			s.publishToDeviceWS(from, device, wsPayload)
 		}
-		if os.Getenv("SEND_PUSH") != "" {
-			s.SendPush(fromString, fromString)
-		}
+		s.SendPush(fromString, fromString)
 	}
 
 	c.JSON(http.StatusOK, gin.H{})

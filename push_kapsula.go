@@ -57,9 +57,7 @@ func (s *Server) SendPush(recipientPublicKey, senderPublicKey string) {
 	}
 
 	nodePublicKey := resolveNodePublicKey()
-	accessToken := strings.TrimSpace(os.Getenv("KAPSULA_PUSH_ACCESS_TOKEN"))
-
-	if accessToken == "" && nodePublicKey == "" {
+	if nodePublicKey == "" {
 		return
 	}
 
@@ -68,7 +66,6 @@ func (s *Server) SendPush(recipientPublicKey, senderPublicKey string) {
 
 func (s *Server) sendPushWebhook(recipientPublicKey, senderPublicKey string) {
 	nodePublicKey := resolveNodePublicKey()
-	accessToken := strings.TrimSpace(os.Getenv("KAPSULA_PUSH_ACCESS_TOKEN"))
 
 	payload := pushMessageWebhookRequest{
 		EventID:             "msg-" + uuid.NewString(),
@@ -96,11 +93,7 @@ func (s *Server) sendPushWebhook(recipientPublicKey, senderPublicKey string) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// Access token issued for this service.
-	if accessToken != "" {
-		req.Header.Set("Authorization", "Bearer "+accessToken)
-	}
-	// Optional compatibility header for allowlist mode on push service.
+	// Identify the sending node to the push service.
 	if nodePublicKey != "" {
 		req.Header.Set("X-Node-Public-Key", nodePublicKey)
 	}
@@ -196,12 +189,8 @@ func (s *Server) SendPushLegacy(recipientPublicKey string) {
 }
 
 func validateKapsulaPushConfig() error {
-	accessToken := strings.TrimSpace(os.Getenv("KAPSULA_PUSH_ACCESS_TOKEN"))
-	if accessToken == "" {
-		return fmt.Errorf("KAPSULA_PUSH_ACCESS_TOKEN is not set; push webhook calls will likely be unauthorized")
-	}
 	if readMSFKeySecret() == "" {
-		return fmt.Errorf("MSF push key is not available at %s; X-Node-Public-Key will be omitted", msfKeySecretPath)
+		return fmt.Errorf("MSF push key is not available at %s; push webhook calls are disabled", msfKeySecretPath)
 	}
 	return nil
 }

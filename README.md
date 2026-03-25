@@ -141,4 +141,4 @@ Additionally, the server writes a Netdata Prometheus mapping YAML to the data di
 - /run/secrets/MSF_KEY
   - Default: absent
   - Example: file contents `"[12,34,56,78]"`
-  - Description: Secret file containing an Ed25519 private key or seed serialized as a JSON array of byte values. Used to derive `X-Node-Public-Key` for push webhook calls.
+  - Description: Secret file containing an Ed25519 private key or seed serialized as a JSON array of byte values. When present, push sending is enabled and `X-Node-Public-Key` is derived from it for push webhook calls.

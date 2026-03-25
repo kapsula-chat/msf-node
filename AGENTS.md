@@ -69,8 +69,7 @@ docker build -t kapsula-server:local .
 - `ENV=PRODUCTION` переключает директорию данных на `/data`.
 - `KAPSULA_ACCESS_TOKEN` включает Bearer-auth для всех endpoint, кроме `POST /message`.
 - `SHOW_NO_DEVICE` возвращает явную ошибку при отправке без зарегистрированных устройств.
-- `SEND_PUSH` включает отправку push через `https://presence.kapsula.chat/push`.
-- `/run/secrets/MSF_KEY` содержит сериализованный Ed25519 seed/private key для derivation `X-Node-Public-Key` в push webhook.
+- `/run/secrets/MSF_KEY` содержит сериализованный Ed25519 seed/private key; при наличии этого секрета отправка push включается автоматически и из него derivation `X-Node-Public-Key`.
 
 ## Что учитывать при ревью/доработках
 - В коде есть сетевые вызовы (DNS, внешние HTTP); они влияют на latency и отказоустойчивость.
