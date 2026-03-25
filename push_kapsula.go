@@ -26,10 +26,8 @@ type pushMessageWebhookRequest struct {
 	EventID             string   `json:"eventId"`
 	RecipientPublicKeys []string `json:"recipientPublicKeys"`
 	SenderPublicKey     string   `json:"senderPublicKey"`
-	Preview             string   `json:"preview"`
-	ChatID              string   `json:"chatId"`
+	Text                string   `json:"text"`
 	Timestamp           int64    `json:"timestamp"`
-	Lang                string   `json:"lang,omitempty"`
 }
 
 const msfKeySecretPath = "/run/secrets/MSF_KEY"
@@ -57,7 +55,7 @@ func (s *Server) SendPush(recipientPublicKey, senderPublicKey string) {
 		return
 	}
 
-	nodePublicKey := resolveNodePublicKey()
+	nodePublicKey := s.resolveNodePublicKey()
 	if nodePublicKey == "" {
 		log.Printf("Skipping push: node public key is unavailable")
 		return
@@ -67,18 +65,14 @@ func (s *Server) SendPush(recipientPublicKey, senderPublicKey string) {
 }
 
 func (s *Server) sendPushWebhook(recipientPublicKey, senderPublicKey string) {
-	nodePublicKey := resolveNodePublicKey()
+	nodePublicKey := s.resolveNodePublicKey()
 
 	payload := pushMessageWebhookRequest{
 		EventID:             "msg-" + uuid.NewString(),
 		RecipientPublicKeys: []string{recipientPublicKey},
 		SenderPublicKey:     senderPublicKey,
-		Preview:             "",
-		ChatID:              buildMessageChatID(recipientPublicKey, senderPublicKey),
+		Text:                "",
 		Timestamp:           time.Now().UnixMilli(),
-	}
-	if lang := strings.TrimSpace(os.Getenv("KAPSULA_PUSH_LANG")); lang != "" {
-		payload.Lang = lang
 	}
 
 	body, err := json.Marshal(payload)
@@ -114,29 +108,32 @@ func (s *Server) sendPushWebhook(recipientPublicKey, senderPublicKey string) {
 	log.Printf("kapsula-push webhook sent: status=%d recipient=%s", resp.StatusCode, recipientPublicKey)
 }
 
-func resolveNodePublicKey() string {
-	// Derive the node public key from the mounted secret to avoid duplicated config.
-	privSerialized := readMSFKeySecret()
-	if privSerialized == "" {
-		log.Printf("MSF key secret is empty or unavailable at %s", msfKeySecretPath)
-		return ""
-	}
+func (s *Server) resolveNodePublicKey() string {
+	s.pushKeyOnce.Do(func() {
+		// Derive the node public key from the mounted secret to avoid duplicated config.
+		privSerialized := readMSFKeySecret()
+		if privSerialized == "" {
+			log.Printf("MSF key secret is empty or unavailable at %s", msfKeySecretPath)
+			return
+		}
 
-	raw, err := parseSerializedByteArray(privSerialized)
-	if err != nil {
-		log.Printf("Failed to parse MSF key secret at %s: %v", msfKeySecretPath, err)
-		return ""
-	}
+		raw, err := parseSerializedByteArray(privSerialized)
+		if err != nil {
+			log.Printf("Failed to parse MSF key secret at %s: %v", msfKeySecretPath, err)
+			return
+		}
 
-	switch len(raw) {
-	case ed25519.SeedSize:
-		return base58.Encode(ed25519.NewKeyFromSeed(raw).Public().(ed25519.PublicKey))
-	case ed25519.PrivateKeySize:
-		return base58.Encode(ed25519.PrivateKey(raw).Public().(ed25519.PublicKey))
-	}
+		switch len(raw) {
+		case ed25519.SeedSize:
+			s.pushNodePublicKey = base58.Encode(ed25519.NewKeyFromSeed(raw).Public().(ed25519.PublicKey))
+		case ed25519.PrivateKeySize:
+			s.pushNodePublicKey = base58.Encode(ed25519.PrivateKey(raw).Public().(ed25519.PublicKey))
+		default:
+			log.Printf("Unsupported MSF key length at %s: got %d bytes", msfKeySecretPath, len(raw))
+		}
+	})
 
-	log.Printf("Unsupported MSF key length at %s: got %d bytes", msfKeySecretPath, len(raw))
-	return ""
+	return s.pushNodePublicKey
 }
 
 func readMSFKeySecret() string {

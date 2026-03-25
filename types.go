@@ -38,6 +38,9 @@ type Server struct {
 	badgerSSTFiles     int       // number of .sst files
 	badgerVlogFiles    int       // number of .vlog files
 	badgerLastObserved time.Time // last time metrics were collected
+
+	pushKeyOnce       sync.Once
+	pushNodePublicKey string
 }
 
 type DeviceInfo struct {

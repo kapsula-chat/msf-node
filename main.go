@@ -356,13 +356,12 @@ func main() {
 	if err := validateKapsulaPushConfig(); err != nil {
 		log.Printf("Push config warning: %v", err)
 	}
-	if publicKey := resolveNodePublicKey(); publicKey != "" {
+	server := NewServer(dataDir)
+	if publicKey := server.resolveNodePublicKey(); publicKey != "" {
 		log.Printf("Node public key: %s", publicKey)
 	} else {
 		log.Printf("Node public key is unavailable")
 	}
-
-	server := NewServer(dataDir)
 	if err := server.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
